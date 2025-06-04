@@ -58,7 +58,6 @@ private:
   unsigned viscID_{stk::mesh::InvalidOrdinal};
   unsigned tviscID_{stk::mesh::InvalidOrdinal};
   unsigned dudxID_{stk::mesh::InvalidOrdinal};
-  unsigned wallDistID_{stk::mesh::InvalidOrdinal};
   unsigned dualNodalVolumeID_{stk::mesh::InvalidOrdinal};
 
   NodeKernelTraits::DblType betaStar_;

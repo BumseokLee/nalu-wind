@@ -29,7 +29,6 @@ TKESSTBLTDLRNodeKernel::TKESSTBLTDLRNodeKernel(
     viscID_(get_field_ordinal(meta, "viscosity")),
     tviscID_(get_field_ordinal(meta, "turbulent_viscosity")),
     dudxID_(get_field_ordinal(meta, "dudx")),
-    wallDistID_(get_field_ordinal(meta, "minimum_distance_to_wall")),
     dualNodalVolumeID_(get_field_ordinal(meta, "dual_nodal_volume")),
     nDim_(meta.spatial_dimension())
 {
@@ -48,7 +47,6 @@ TKESSTBLTDLRNodeKernel::setup(Realm& realm)
   dualNodalVolume_ = fieldMgr.get_field<double>(dualNodalVolumeID_);
   gamint_ = fieldMgr.get_field<double>(gamintID_);
   visc_ = fieldMgr.get_field<double>(viscID_);
-  wallDist_ = fieldMgr.get_field<double>(wallDistID_);
 
   // Update turbulence model constants
   betaStar_ = realm.get_turb_model_constant(TM_betaStar);
@@ -76,11 +74,6 @@ TKESSTBLTDLRNodeKernel::execute(
 
   const DblType gamint = gamint_.get(node, 0);
   const DblType visc = visc_.get(node, 0);
-  const DblType dw = wallDist_.get(node, 0);
-
-  const DblType Ck_BLT = 1.0;
-  const DblType CSEP = 1.0;
-  const DblType Retclim = 1100.0;
 
   DblType sijMag = 1.0e-16;
   DblType vortMag = 1.0e-16;
@@ -101,23 +94,30 @@ TKESSTBLTDLRNodeKernel::execute(
   sijMag = stk::math::sqrt(2.0 * sijMag);
   vortMag = stk::math::sqrt(2.0 * vortMag);
 
-  const DblType Rev = density * dw * dw * sijMag / visc;
-  const DblType Fonlim =
-    stk::math::min(stk::math::max(Rev / 2.2 / Retclim - 1.0, 0.0), 3.0);
+  // Bumseok: not clear which one is correct: need to test all the options
 
-  // Pk based on Kato-Launder formulation
-  const DblType Pk = gamint * tvisc * sijMag * vortMag;
-  const DblType Pklim =
-    5.0 * Ck_BLT * stk::math::max(gamint - 0.2, 0.0) * (1.0 - gamint) * Fonlim *
-    stk::math::max(3.0 * CSEP * visc - tvisc, 0.0) * sijMag * vortMag;
+  //// Option 1 no production the limiter
+  //const DblType Pk = gamint * tvisc * sijMag * sijMag;
+
+  //// Option 1-1: Kato-Launder, no production the limiter like M15
+  //const DblType Pk = gamint * tvisc * vortMag * sijMag;
+
+  //// Option 2: with the limiter, what I tested
+  DblType Pk = gamint * tvisc * sijMag * sijMag;
+  Pk = stk::math::min(Pk, tkeProdLimitRatio_ * betaStar_ * density * sdr * tke);
+
+  // Option 3: similar to LM transition model
+  //DblType Pk = tvisc * sijMag * sijMag;
+  //Pk = gamint * stk::math::min(Pk, tkeProdLimitRatio_ * betaStar_ * density * sdr * tke);
+
   const DblType Dk =
-    betaStar_ * density * sdr * tke * stk::math::max(gamint, 0.1);
+    betaStar_ * density * sdr * tke * stk::math::min(stk::math::max(gamint, 0.1), 1.0);
 
   // SUST source term
   const DblType Dkamb = betaStar_ * density * sdrAmb_ * tkeAmb_;
 
-  rhs(0) += (Pk + Pklim - Dk + Dkamb) * dVol;
-  lhs(0, 0) += betaStar_ * density * sdr * stk::math::max(gamint, 0.1) * dVol;
+  rhs(0) += (Pk - Dk + Dkamb) * dVol;
+  lhs(0, 0) += betaStar_ * density * sdr * stk::math::min(stk::math::max(gamint, 0.1), 1.0) * dVol;
 }
 
 } // namespace nalu
