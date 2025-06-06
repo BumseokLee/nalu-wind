@@ -47,14 +47,15 @@ public:
     NodeKernelTraits::RhsType&,
     const stk::mesh::FastMeshIndex&) override;
 
-  KOKKOS_FUNCTION
-  double FPG(const double& lamda0L);
-
 private:
   stk::mesh::NgpField<double> tke_;
   stk::mesh::NgpField<double> sdr_;
   stk::mesh::NgpField<double> density_;
   stk::mesh::NgpField<double> visc_;
+  stk::mesh::NgpField<double> tvisc_;
+  stk::mesh::NgpField<double> velocity_;
+  stk::mesh::NgpField<double> pressure_;
+  stk::mesh::NgpField<double> dpdx_;
   stk::mesh::NgpField<double> dudx_;
   stk::mesh::NgpField<double> minD_;
   stk::mesh::NgpField<double> dwalldistdx_;
@@ -68,6 +69,10 @@ private:
   unsigned sdrID_{stk::mesh::InvalidOrdinal};
   unsigned densityID_{stk::mesh::InvalidOrdinal};
   unsigned viscID_{stk::mesh::InvalidOrdinal};
+  unsigned tviscID_{stk::mesh::InvalidOrdinal};
+  unsigned velocityID_{stk::mesh::InvalidOrdinal};
+  unsigned pressureID_{stk::mesh::InvalidOrdinal};
+  unsigned dpdxID_{stk::mesh::InvalidOrdinal};
   unsigned dudxID_{stk::mesh::InvalidOrdinal};
   unsigned minDID_{stk::mesh::InvalidOrdinal};
   unsigned dwalldistdxID_{stk::mesh::InvalidOrdinal};
