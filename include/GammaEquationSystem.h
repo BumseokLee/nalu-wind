@@ -79,6 +79,7 @@ public:
   ScalarFieldType* visc_;
   ScalarFieldType* tvisc_;
   ScalarFieldType* evisc_;
+  ScalarFieldType* lamda0L_;
   ScalarNodalGradAlgDriver nodalGradAlgDriver_;
   ScalarNodalGradAlgDriver wallDistGradAlgDriver_;
   ScalarNodalGradAlgDriver nDotVGradAlgDriver_;

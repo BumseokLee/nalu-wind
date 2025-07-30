@@ -49,6 +49,7 @@ private:
   unsigned gamma_{stk::mesh::InvalidOrdinal};
   unsigned dpdx_{stk::mesh::InvalidOrdinal};
   unsigned tvisc_{stk::mesh::InvalidOrdinal};
+  unsigned lamda0L_{stk::mesh::InvalidOrdinal};
 
   const DblType aOne_;
   const DblType betaStar_;

@@ -43,6 +43,7 @@ TurbViscSSTAlg::TurbViscSSTAlg(
     velocity_(get_field_ordinal(realm.meta_data(), "velocity")),
     dpdx_(get_field_ordinal(realm.meta_data(), "dpdx")),
     tvisc_(tvisc->mesh_meta_data_ordinal()),
+    lamda0L_(get_field_ordinal(realm.meta_data(), "lamda0L")),
     aOne_(realm.get_turb_model_constant(TM_aOne)),
     betaStar_(realm.get_turb_model_constant(TM_betaStar)),
     gammaEqActive_(realm.solutionOptions_->gammaEqActive_)
@@ -75,8 +76,10 @@ TurbViscSSTAlg::execute()
   const auto gamma = fieldMgr.get_field<double>(gamma_);
   const auto dpdx = fieldMgr.get_field<double>(dpdx_);
   auto tvisc = fieldMgr.get_field<double>(tvisc_);
+  auto lamda0L_field = fieldMgr.get_field<double>(lamda0L_);
 
   tvisc.sync_to_device();
+  lamda0L_field.sync_to_device();
 
   const DblType aOne = aOne_;
   const DblType betaStar = betaStar_;
@@ -117,6 +120,7 @@ TurbViscSSTAlg::execute()
       lamda0L = -7.57e-3 * dvnn * minD.get(meshIdx, 0) * minD.get(meshIdx, 0) * density.get(meshIdx, 0) / visc.get(meshIdx, 0) + 0.0128;
       lamda0L = stk::math::min(stk::math::max(lamda0L, -1.0), 1.0);
 
+      lamda0L_field.get(meshIdx, 0) = lamda0L;
 
       // Note that dwalldistdx is the normal vector
       // Compute wall normal velocity magnitude: nDotV
@@ -162,6 +166,7 @@ TurbViscSSTAlg::execute()
 
     });
   tvisc.modify_on_device();
+  lamda0L_field.modify_on_device();
 }
 
 } // namespace nalu

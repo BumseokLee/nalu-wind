@@ -104,6 +104,7 @@ GammaEquationSystem::GammaEquationSystem(EquationSystems& eqSystems)
     visc_(NULL),
     tvisc_(NULL),
     evisc_(NULL),
+    lamda0L_(NULL),
     nodalGradAlgDriver_(realm_, "gamma_transition", "dgamdx"),
     wallDistGradAlgDriver_(realm_, "minimum_distance_to_wall", "dwalldistdx"),
     nDotVGradAlgDriver_(realm_, "nDotV", "dnDotVdx")
@@ -193,6 +194,10 @@ GammaEquationSystem::register_nodal_fields(
   tvisc_ = &(meta_data.declare_field<double>(
     stk::topology::NODE_RANK, "turbulent_viscosity"));
   stk::mesh::put_field_on_mesh(*tvisc_, selector, nullptr);
+
+  lamda0L_ = &(meta_data.declare_field<double>(
+    stk::topology::NODE_RANK, "lamda0L"));
+  stk::mesh::put_field_on_mesh(*lamda0L_, selector, nullptr);
 
   evisc_ = &(meta_data.declare_field<double>(
     stk::topology::NODE_RANK, "effective_viscosity_gamma"));
