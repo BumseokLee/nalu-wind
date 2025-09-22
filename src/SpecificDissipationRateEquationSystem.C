@@ -54,6 +54,7 @@
 #include <node_kernels/SDRKONodeKernel.h>
 
 #include <node_kernels/SDRSSTBLTM2015NodeKernel.h>
+#include <node_kernels/SDRSSTBLTDLRNodeKernel.h>
 
 // ngp
 #include "ngp_utils/NgpFieldBLAS.h"
@@ -274,7 +275,8 @@ SpecificDissipationRateEquationSystem::register_interior_algorithm(
         if (realm_.solutionOptions_->gammaEqActive_) {
           if (
             TurbulenceModel::SST == realm_.solutionOptions_->turbulenceModel_) {
-            nodeAlg.add_kernel<SDRSSTBLTM2015NodeKernel>(realm_.meta_data());
+            //nodeAlg.add_kernel<SDRSSTBLTM2015NodeKernel>(realm_.meta_data());
+            nodeAlg.add_kernel<SDRSSTBLTDLRNodeKernel>(realm_.meta_data());
           } else {
             throw std::runtime_error(
               "Invalid turbulene model: Currently the transition model only "

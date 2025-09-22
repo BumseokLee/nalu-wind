@@ -63,6 +63,7 @@
 #include <node_kernels/TKEKONodeKernel.h>
 
 #include <node_kernels/TKESSTBLTM2015NodeKernel.h>
+#include <node_kernels/TKESSTBLTDLRNodeKernel.h>
 
 // ngp
 #include <ngp_utils/NgpLoopUtils.h>
@@ -308,7 +309,8 @@ TurbKineticEnergyEquationSystem::register_interior_algorithm(
           if (!realm_.solutionOptions_->gammaEqActive_) {
             nodeAlg.add_kernel<TKESSTNodeKernel>(realm_.meta_data());
           } else {
-            nodeAlg.add_kernel<TKESSTBLTM2015NodeKernel>(realm_.meta_data());
+            //nodeAlg.add_kernel<TKESSTBLTM2015NodeKernel>(realm_.meta_data());
+            nodeAlg.add_kernel<TKESSTBLTDLRNodeKernel>(realm_.meta_data());
           }
           break;
         case TurbulenceModel::SSTLR:

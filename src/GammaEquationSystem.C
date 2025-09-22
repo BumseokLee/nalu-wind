@@ -49,6 +49,7 @@
 #include <node_kernels/ScalarMassBDFNodeKernel.h>
 #include <node_kernels/ScalarGclNodeKernel.h>
 #include <node_kernels/BLTGammaM2015NodeKernel.h>
+#include <node_kernels/BLTGammaDLRNodeKernel.h>
 
 // ngp
 #include "ngp_utils/NgpFieldBLAS.h"
@@ -298,9 +299,10 @@ GammaEquationSystem::register_interior_algorithm(stk::mesh::Part* part)
         nodeAlg.add_kernel<ScalarMassBDFNodeKernel>(realm_.bulk_data(), gamma_);
 
         NaluEnv::self().naluOutputP0()
-          << "call BLTGammaM2015NodeKernel: " << std::endl;
-
-        nodeAlg.add_kernel<BLTGammaM2015NodeKernel>(realm_.meta_data());
+//          << "call BLTGammaM2015NodeKernel: " << std::endl;
+//        nodeAlg.add_kernel<BLTGammaM2015NodeKernel>(realm_.meta_data());
+          << "call BLTGammaDLRNodeKernel: " << std::endl;
+        nodeAlg.add_kernel<BLTGammaDLRNodeKernel>(realm_.meta_data());
       },
       [&](AssembleNGPNodeSolverAlgorithm& nodeAlg, std::string& srcName) {
         if (srcName == "gcl") {
