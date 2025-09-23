@@ -199,7 +199,6 @@ BLTGammaDLRNodeKernel::execute(
                         67.962 * stk::math::pow(lambda_t, 2) +
                         17.574 * lambda_t + 2.0593);
     } else {
-      // This is added by DLR, not in the original AHD
       h12 = 2.072 + 0.0731 / (lambda_t + 0.14);
     }
 
@@ -210,13 +209,14 @@ BLTGammaDLRNodeKernel::execute(
 
     lambda_t = stk::math::pow(Rev / pi_shape, 2) * nue / (Ue * Ue) * dUeds;
 
+    // Limit lambda_t within the range
     lambda_t =
       stk::math::max(stk::math::min(lambda_t, lambda_t_max), lambda_t_min);
 
     // Compute residual
     resid_theta = stk::math::abs(theta_t - theta_t_old);
 
-    if (resid_theta <= 1e-10) {
+    if (iter > 10 && resid_theta <= 1e-10) {
       break; // Convergence achieved
     }
   }
