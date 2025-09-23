@@ -108,22 +108,12 @@ SDRSSTBLTDLRNodeKernel::execute(
   sijMag = stk::math::sqrt(2.0 * sijMag);
   vortMag = stk::math::sqrt(2.0 * vortMag);
 
-  // Product 
-  // Bumseok: same here : need to test all the options
-
-  //// Option 1 no production the limiter
-  //const DblType Pk = tvisc * sijMag * sijMag;
-
-  //// Option 1-1: Kato-Launder, no production the limiter like M15 model
+  // M2015: Kato-Launder, no production limiter
   //const DblType Pk = tvisc * vortMag * sijMag;
 
-  //// Option 2: with the limiter, what I tested
+  // SST-2003 with the simplified Pk
   DblType Pk = tvisc * sijMag * sijMag;
   Pk = stk::math::min(Pk, tkeProdLimitRatio_ * betaStar_ * density * sdr * tke);
-
-  // Option 3: similar to LM transition model
-  //DblType Pk = tvisc * sijMag * sijMag;
-  //Pk = gamint * stk::math::min(Pk, tkeProdLimitRatio_ * betaStar_ * density * sdr * tke);
 
   // Blend constants for SDR
   const DblType omf1 = (1.0 - fOneBlend);
