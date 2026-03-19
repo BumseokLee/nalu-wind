@@ -648,6 +648,19 @@ convert<sierra::nalu::GammaInf>::decode(
 }
 
 bool
+convert<sierra::nalu::SANuTilda>::decode(
+  const Node& node, sierra::nalu::SANuTilda& saNuTilda)
+{
+  if (!node.IsScalar()) {
+    return false;
+  }
+
+  saNuTilda.saNuTilda_ = node.as<double>();
+
+  return true;
+}
+
+bool
 convert<sierra::nalu::Temperature>::decode(
   const Node& node, sierra::nalu::Temperature& t)
 {
@@ -977,6 +990,10 @@ convert<sierra::nalu::InflowUserData>::decode(
       node["mass_fraction"].as<sierra::nalu::MassFraction>();
     inflowData.massFractionSpec_ = true;
   }
+  if (node["sa_nu_tilda"]) {
+    inflowData.saNuTilda_ = node["sa_nu_tilda"].as<sierra::nalu::SANuTilda>();
+    inflowData.saNuTildaSpec_ = true;
+  }
   if (node["temperature"]) {
     try {
       inflowData.temperature_ =
@@ -1066,6 +1083,10 @@ convert<sierra::nalu::OpenUserData>::decode(
     openData.massFraction_ =
       node["mass_fraction"].as<sierra::nalu::MassFraction>();
     openData.massFractionSpec_ = true;
+  }
+  if (node["sa_nu_tilda"]) {
+    openData.saNuTilda_ = node["sa_nu_tilda"].as<sierra::nalu::SANuTilda>();
+    openData.saNuTildaSpec_ = true;
   }
   if (node["temperature"]) {
     try {
