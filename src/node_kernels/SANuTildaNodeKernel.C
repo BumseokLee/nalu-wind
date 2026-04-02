@@ -51,6 +51,8 @@ SANuTildaNodeKernel::setup(Realm& realm)
   sigma_ = realm.get_turb_model_constant(TM_saSigma);
   kappa_ = realm.get_turb_model_constant(TM_kappa);
   Cv1_ = realm.get_turb_model_constant(TM_saCV1);
+  Cv2_ = realm.get_turb_model_constant(TM_saCV2);
+  Cv3_ = realm.get_turb_model_constant(TM_saCV3);
   Cw2_ = realm.get_turb_model_constant(TM_saCw2);
   Cw3_ = realm.get_turb_model_constant(TM_saCw3);
   Ct3_ = realm.get_turb_model_constant(TM_saCt3);
@@ -105,15 +107,14 @@ SANuTildaNodeKernel::execute(
   Omega = stk::math::sqrt(Omega);
 
   // STilda = Omega + nuTilda / (kappa^2 * d^2) * fv2
-  // With clipping to prevent negative STilda
+  // With clipping to prevent negative STilda: ICCFD7-1902
   const DblType Sbar = nuTilda * fv2 / (kappa_ * kappa_ * d * d);
   DblType STilda;
-  if (Sbar >= -Cv1_ * Cv1_ * Omega) {
+  if (Sbar >= -Cv2_ * Omega) {
     STilda = Omega + Sbar;
   } else {
-    const DblType Cv1_2 = Cv1_ * Cv1_;
-    STilda = Omega + Omega * (Cv1_2 * Omega + Cv1_ * Cv1_ * Sbar) /
-                       ((Cv1_2 - 2.0 * Cv1_2) * Omega - Sbar);
+    STilda = Omega + Omega * (Cv2_ * Cv2_ * Omega + Cv3_ * Sbar) /
+                       ((Cv3_ - 2.0 * Cv2_) * Omega - Sbar);
   }
 
   // Ensure STilda is positive (safety clipping)

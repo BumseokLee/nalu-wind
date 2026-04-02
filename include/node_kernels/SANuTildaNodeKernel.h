@@ -63,6 +63,8 @@ private:
   NodeKernelTraits::DblType sigma_;
   NodeKernelTraits::DblType kappa_;
   NodeKernelTraits::DblType Cv1_;
+  NodeKernelTraits::DblType Cv2_;
+  NodeKernelTraits::DblType Cv3_;
   NodeKernelTraits::DblType Cw2_;
   NodeKernelTraits::DblType Cw3_;
   NodeKernelTraits::DblType Ct3_;
