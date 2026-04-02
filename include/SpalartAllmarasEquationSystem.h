@@ -88,6 +88,7 @@ public:
 
   void initial_work();
   virtual void post_external_data_transfer_work();
+  virtual void predict_state();
 
   void compute_effective_diff_flux_coeff();
   void compute_wall_model_parameters();

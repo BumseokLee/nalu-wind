@@ -9,6 +9,8 @@
 
 #include <SpalartAllmarasEquationSystem.h>
 #include <AlgorithmDriver.h>
+#include <AssembleScalarNonConformalSolverAlgorithm.h>
+#include <AssembleNodalGradNonConformalAlgorithm.h>
 #include <AssembleNGPNodeSolverAlgorithm.h>
 #include <AuxFunctionAlgorithm.h>
 #include <ConstantAuxFunction.h>
@@ -34,8 +36,17 @@
 #include <node_kernels/ScalarMassBDFNodeKernel.h>
 #include <node_kernels/ScalarGclNodeKernel.h>
 
+// template for kernels
+#include <AlgTraits.h>
+#include <kernel/KernelBuilder.h>
+#include <kernel/KernelBuilderLog.h>
+
+// kernels
+#include <AssembleElemSolverAlgorithm.h>
+
 // edge kernels
 #include <edge_kernels/ScalarEdgeSolverAlg.h>
+#include <edge_kernels/ScalarOpenEdgeKernel.h>
 
 // ngp algorithms
 #include <ngp_algorithms/EffDiffFluxCoeffSAAlg.h>
@@ -261,13 +272,16 @@ SpalartAllmarasEquationSystem::register_interior_algorithm(
   ScalarFieldType& nuTildaNp1 = nuTilda_->field_of_state(stk::mesh::StateNP1);
   VectorFieldType& dnutdxNone = dnutdx_->field_of_state(stk::mesh::StateNone);
 
-  if (edgeNodalGradient_ && realm_.realmUsesEdges_)
-    nodalGradAlgDriver_.register_edge_algorithm<ScalarNodalGradEdgeAlg>(
-      algType, part, "sa_nutilda_nodal_grad", &nuTildaNp1, &dnutdxNone);
-  else
-    nodalGradAlgDriver_.register_elem_algorithm<ScalarNodalGradElemAlg>(
-      algType, part, "sa_nutilda_nodal_grad", &nuTildaNp1, &dnutdxNone,
-      edgeNodalGradient_);
+  // non-solver, dnutdx; allow for element-based shifted
+  if (!managePNG_) {
+    if (edgeNodalGradient_ && realm_.realmUsesEdges_)
+      nodalGradAlgDriver_.register_edge_algorithm<ScalarNodalGradEdgeAlg>(
+        algType, part, "sa_nutilda_nodal_grad", &nuTildaNp1, &dnutdxNone);
+    else
+      nodalGradAlgDriver_.register_elem_algorithm<ScalarNodalGradElemAlg>(
+        algType, part, "sa_nutilda_nodal_grad", &nuTildaNp1, &dnutdxNone,
+        edgeNodalGradient_);
+  }
 
   // solver; interior contribution (advection + diffusion)
   if (!realm_.solutionOptions_->useConsolidatedSolverAlg_) {
@@ -391,9 +405,11 @@ SpalartAllmarasEquationSystem::register_inflow_bc(
   bcDataMapAlg_.push_back(theCopyAlg);
 
   // non-solver: dnutdx; allow for element-based shifted
-  nodalGradAlgDriver_.register_face_algorithm<ScalarNodalGradBndryElemAlg>(
-    algType, part, "sa_nutilda_nodal_grad", &nuTildaNp1, &dnutdxNone,
-    edgeNodalGradient_);
+  if (!managePNG_) {
+    nodalGradAlgDriver_.register_face_algorithm<ScalarNodalGradBndryElemAlg>(
+      algType, part, "sa_nutilda_nodal_grad", &nuTildaNp1, &dnutdxNone,
+      edgeNodalGradient_);
+  }
 
   // Dirichlet bc
   std::map<AlgorithmType, SolverAlgorithm*>::iterator itd =
@@ -413,7 +429,7 @@ SpalartAllmarasEquationSystem::register_inflow_bc(
 void
 SpalartAllmarasEquationSystem::register_open_bc(
   stk::mesh::Part* part,
-  const stk::topology& /*theTopo*/,
+  const stk::topology& partTopo,
   const OpenBoundaryConditionData& openBCData)
 {
   // algorithm type
@@ -445,9 +461,32 @@ SpalartAllmarasEquationSystem::register_open_bc(
   bcDataAlg_.push_back(auxAlg);
 
   // non-solver: dnutdx; allow for element-based shifted
-  nodalGradAlgDriver_.register_face_algorithm<ScalarNodalGradBndryElemAlg>(
-    algType, part, "sa_nutilda_nodal_grad", &nuTildaNp1, &dnutdxNone,
-    edgeNodalGradient_);
+  if (!managePNG_) {
+    nodalGradAlgDriver_.register_face_algorithm<ScalarNodalGradBndryElemAlg>(
+      algType, part, "sa_nutilda_nodal_grad", &nuTildaNp1, &dnutdxNone,
+      edgeNodalGradient_);
+  }
+
+  // solver; open bc advection (handles outflow and entrainment)
+  if (realm_.realmUsesEdges_) {
+    auto& solverAlgMap = solverAlgDriver_->solverAlgorithmMap_;
+    AssembleElemSolverAlgorithm* elemSolverAlg = nullptr;
+    bool solverAlgWasBuilt = false;
+
+    std::tie(elemSolverAlg, solverAlgWasBuilt) =
+      build_or_add_part_to_face_bc_solver_alg(
+        *this, *part, solverAlgMap, "open");
+
+    auto& dataPreReqs = elemSolverAlg->dataNeededByKernels_;
+    auto& activeKernels = elemSolverAlg->activeKernels_;
+
+    build_face_topo_kernel_automatic<ScalarOpenEdgeKernel>(
+      partTopo, *this, activeKernels, "sa_nu_tilda_open", realm_.meta_data(),
+      *realm_.solutionOptions_, nuTilda_, theBcField, dataPreReqs);
+  } else {
+    throw std::runtime_error(
+      "SA_EQS: Attempt to use element open solver algorithm");
+  }
 }
 
 //--------------------------------------------------------------------------
@@ -490,9 +529,11 @@ SpalartAllmarasEquationSystem::register_wall_bc(
   bcDataMapAlg_.push_back(theCopyAlg);
 
   // non-solver: dnutdx
-  nodalGradAlgDriver_.register_face_algorithm<ScalarNodalGradBndryElemAlg>(
-    algType, part, "sa_nutilda_nodal_grad", &nuTildaNp1, &dnutdxNone,
-    edgeNodalGradient_);
+  if (!managePNG_) {
+    nodalGradAlgDriver_.register_face_algorithm<ScalarNodalGradBndryElemAlg>(
+      algType, part, "sa_nutilda_nodal_grad", &nuTildaNp1, &dnutdxNone,
+      edgeNodalGradient_);
+  }
 
   // Dirichlet bc (nuTilda = 0 at wall)
   std::map<AlgorithmType, SolverAlgorithm*>::iterator itd =
@@ -543,9 +584,11 @@ SpalartAllmarasEquationSystem::register_symmetry_bc(
   VectorFieldType& dnutdxNone = dnutdx_->field_of_state(stk::mesh::StateNone);
 
   // non-solver: dnutdx
-  nodalGradAlgDriver_.register_face_algorithm<ScalarNodalGradBndryElemAlg>(
-    algType, part, "sa_nutilda_nodal_grad", &nuTildaNp1, &dnutdxNone,
-    edgeNodalGradient_);
+  if (!managePNG_) {
+    nodalGradAlgDriver_.register_face_algorithm<ScalarNodalGradBndryElemAlg>(
+      algType, part, "sa_nutilda_nodal_grad", &nuTildaNp1, &dnutdxNone,
+      edgeNodalGradient_);
+  }
 }
 
 //--------------------------------------------------------------------------
@@ -564,9 +607,11 @@ SpalartAllmarasEquationSystem::register_abltop_bc(
   VectorFieldType& dnutdxNone = dnutdx_->field_of_state(stk::mesh::StateNone);
 
   // non-solver: dnutdx
-  nodalGradAlgDriver_.register_face_algorithm<ScalarNodalGradBndryElemAlg>(
-    algType, part, "sa_nutilda_nodal_grad", &nuTildaNp1, &dnutdxNone,
-    edgeNodalGradient_);
+  if (!managePNG_) {
+    nodalGradAlgDriver_.register_face_algorithm<ScalarNodalGradBndryElemAlg>(
+      algType, part, "sa_nutilda_nodal_grad", &nuTildaNp1, &dnutdxNone,
+      edgeNodalGradient_);
+  }
 }
 
 //--------------------------------------------------------------------------
@@ -581,10 +626,30 @@ SpalartAllmarasEquationSystem::register_non_conformal_bc(
   ScalarFieldType& nuTildaNp1 = nuTilda_->field_of_state(stk::mesh::StateNP1);
   VectorFieldType& dnutdxNone = dnutdx_->field_of_state(stk::mesh::StateNone);
 
-  // non-solver: dnutdx
-  nodalGradAlgDriver_.register_face_algorithm<ScalarNodalGradBndryElemAlg>(
-    algType, part, "sa_nutilda_nodal_grad", &nuTildaNp1, &dnutdxNone,
-    edgeNodalGradient_);
+  // non-solver; contribution to dnutdx; DG algorithm decides on locations for
+  // integration points
+  if (edgeNodalGradient_) {
+    nodalGradAlgDriver_.register_face_algorithm<ScalarNodalGradBndryElemAlg>(
+      algType, part, "sa_nutilda_nodal_grad", &nuTildaNp1, &dnutdxNone,
+      edgeNodalGradient_);
+  } else {
+    // proceed with DG
+    nodalGradAlgDriver_
+      .register_legacy_algorithm<AssembleNodalGradNonConformalAlgorithm>(
+        algType, part, "sa_nutilda_nodal_grad", &nuTildaNp1, &dnutdxNone);
+  }
+
+  // solver; lhs; same for edge and element-based scheme
+  std::map<AlgorithmType, SolverAlgorithm*>::iterator itsi =
+    solverAlgDriver_->solverAlgMap_.find(algType);
+  if (itsi == solverAlgDriver_->solverAlgMap_.end()) {
+    AssembleScalarNonConformalSolverAlgorithm* theAlg =
+      new AssembleScalarNonConformalSolverAlgorithm(
+        realm_, part, this, nuTilda_, evisc_);
+    solverAlgDriver_->solverAlgMap_[algType] = theAlg;
+  } else {
+    itsi->second->partVec_.push_back(part);
+  }
 }
 
 //--------------------------------------------------------------------------
@@ -705,6 +770,26 @@ SpalartAllmarasEquationSystem::compute_effective_diff_flux_coeff()
 {
   if (effDiffFluxAlg_)
     effDiffFluxAlg_->execute();
+}
+
+void
+SpalartAllmarasEquationSystem::predict_state()
+{
+  const auto& ngpMesh = realm_.ngp_mesh();
+  const auto& fieldMgr = realm_.ngp_field_manager();
+  const auto& nuTildaN = fieldMgr.get_field<double>(
+    nuTilda_->field_of_state(stk::mesh::StateN).mesh_meta_data_ordinal());
+  auto& nuTildaNp1 = fieldMgr.get_field<double>(
+    nuTilda_->field_of_state(stk::mesh::StateNP1).mesh_meta_data_ordinal());
+
+  const auto& meta = realm_.meta_data();
+  const stk::mesh::Selector sel =
+    (meta.locally_owned_part() | meta.globally_shared_part() |
+     meta.aura_part()) &
+    stk::mesh::selectField(*nuTilda_);
+  nuTildaNp1.sync_to_device();
+  nalu_ngp::field_copy(ngpMesh, sel, nuTildaNp1, nuTildaN);
+  nuTildaNp1.modify_on_device();
 }
 
 void
