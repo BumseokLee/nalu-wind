@@ -1,5 +1,5 @@
-#ifndef KYNEMASIXDOF_H
-#define KYNEMASIXDOF_H
+#ifndef KYNEMAFMBSIXDOF_H
+#define KYNEMAFMBSIXDOF_H
 
 #include <array>
 #include <memory>
@@ -30,7 +30,7 @@ struct Tether
 struct PointMass
 {
   bool use_restart_data = false;
-  std::shared_ptr<kynema::interfaces::cfd::Interface> kynema_interface =
+  std::shared_ptr<kynema_fmb::interfaces::cfd::Interface> kynema_interface =
     nullptr;
   std::array<double, 9> moments_of_inertia = {0.0, 0.0, 0.0, 0.0, 0.0,
                                               0.0, 0.0, 0.0, 0.0};
@@ -56,11 +56,11 @@ struct PointMass
   double rho_inf{0.0};
 };
 
-class KynemaSixDof
+class KynemaFMBSixDof
 {
 public:
-  KynemaSixDof(const YAML::Node&);
-  virtual ~KynemaSixDof() = default;
+  KynemaFMBSixDof(const YAML::Node&);
+  virtual ~KynemaFMBSixDof() = default;
 
   void setup(double dtKynemaUGF, std::shared_ptr<stk::mesh::BulkData> bulk);
 
@@ -84,8 +84,8 @@ public:
   }
 
 private:
-  KynemaSixDof() = delete;
-  KynemaSixDof(const KynemaSixDof&) = delete;
+  KynemaFMBSixDof() = delete;
+  KynemaFMBSixDof(const KynemaFMBSixDof&) = delete;
 
   void map_displacements_point(PointMass& point, bool updateCur);
 
@@ -122,7 +122,7 @@ private:
   int restart_frequency_{0};
 
   std::vector<PointMass> point_bodies_;
-  std::vector<kynema::interfaces::cfd::Interface> point_body_interfaces_;
+  std::vector<kynema_fmb::interfaces::cfd::Interface> point_body_interfaces_;
 };
 
 } // namespace kynema_ugf
