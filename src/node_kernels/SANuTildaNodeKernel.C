@@ -85,14 +85,21 @@ SANuTildaNodeKernel::execute(
 
   // chi = nuTilda / nu
   const DblType chi = nuTilda / nu;
-  const DblType chi3 = chi * chi * chi;
+  const DblType chi2 = chi * chi;
+  const DblType chi3 = chi2 * chi;
 
   // fv1 = chi^3 / (chi^3 + Cv1^3)
   const DblType Cv1_3 = Cv1_ * Cv1_ * Cv1_;
-  const DblType fv1 = chi3 / (chi3 + Cv1_3);
+  const DblType fv1Den = chi3 + Cv1_3;
+  const DblType fv1 = chi3 / fv1Den;
+  const DblType dfv1dChi = 3.0 * chi2 * Cv1_3 / (fv1Den * fv1Den);
 
   // fv2 = 1 - chi / (1 + chi * fv1)
-  const DblType fv2 = 1.0 - chi / (1.0 + chi * fv1);
+  const DblType onePlusChiFv1 = 1.0 + chi * fv1;
+  const DblType fv2 = 1.0 - chi / onePlusChiFv1;
+  const DblType dfv2dChi =
+    -(1.0 - chi2 * dfv1dChi) / (onePlusChiFv1 * onePlusChiFv1);
+  const DblType dfv2dNuTilda = dfv2dChi / nu;
 
   // Vorticity magnitude
   DblType Omega = 0.0;
@@ -108,30 +115,55 @@ SANuTildaNodeKernel::execute(
 
   // STilda = Omega + nuTilda / (kappa^2 * d^2) * fv2
   // With clipping to prevent negative STilda: ICCFD7-1902
-  const DblType Sbar = nuTilda * fv2 / (kappa_ * kappa_ * d * d);
+  const DblType kappa2d2 = kappa_ * kappa_ * d * d;
+  const DblType Sbar = nuTilda * fv2 / kappa2d2;
+  const DblType dSbardNuTilda = (fv2 + nuTilda * dfv2dNuTilda) / kappa2d2;
   DblType STilda;
+  DblType dSTildadNuTilda;
   if (Sbar >= -Cv2_ * Omega) {
     STilda = Omega + Sbar;
+    dSTildadNuTilda = dSbardNuTilda;
   } else {
-    STilda = Omega + Omega * (Cv2_ * Cv2_ * Omega + Cv3_ * Sbar) /
-                       ((Cv3_ - 2.0 * Cv2_) * Omega - Sbar);
+    const DblType numer = Cv2_ * Cv2_ * Omega + Cv3_ * Sbar;
+    const DblType denom = (Cv3_ - 2.0 * Cv2_) * Omega - Sbar;
+    STilda = Omega + Omega * numer / denom;
+    dSTildadNuTilda =
+      Omega * (Cv3_ * denom + numer) / (denom * denom) * dSbardNuTilda;
   }
 
   // Ensure STilda is positive (safety clipping)
-  STilda = stk::math::max(STilda, 1.0e-16);
+  if (STilda <= 1.0e-16) {
+    STilda = 1.0e-16;
+    dSTildadNuTilda = 0.0;
+  }
 
   // r = nuTilda / (STilda * kappa^2 * d^2)
-  const DblType r_arg = nuTilda / (STilda * kappa_ * kappa_ * d * d);
-  const DblType r = stk::math::min(r_arg, 10.0);
+  const DblType r_arg = nuTilda / (STilda * kappa2d2);
+  const DblType drArgdNuTilda =
+    (STilda - nuTilda * dSTildadNuTilda) / (STilda * STilda * kappa2d2);
+  DblType r = stk::math::min(r_arg, 10.0);
+  DblType drdNuTilda = (r_arg < 10.0) ? drArgdNuTilda : 0.0;
 
   // g = r + Cw2 * (r^6 - r)
-  const DblType r6 = r * r * r * r * r * r;
+  const DblType r2 = r * r;
+  const DblType r4 = r2 * r2;
+  const DblType r5 = r4 * r;
+  const DblType r6 = r5 * r;
   const DblType g = r + Cw2_ * (r6 - r);
+  const DblType dgdNuTilda = (1.0 + Cw2_ * (6.0 * r5 - 1.0)) * drdNuTilda;
 
   // fw = g * ((1 + Cw3^6) / (g^6 + Cw3^6))^(1/6)
   const DblType Cw3_6 = Cw3_ * Cw3_ * Cw3_ * Cw3_ * Cw3_ * Cw3_;
-  const DblType g6 = g * g * g * g * g * g;
-  const DblType fw = g * stk::math::pow((1.0 + Cw3_6) / (g6 + Cw3_6), 1.0 / 6.0);
+  const DblType g2 = g * g;
+  const DblType g4 = g2 * g2;
+  const DblType g6 = g4 * g2;
+  const DblType fwRatio = (1.0 + Cw3_6) / (g6 + Cw3_6);
+  const DblType fwPow = stk::math::pow(fwRatio, 1.0 / 6.0);
+  const DblType fw = g * fwPow;
+  const DblType dfwdg =
+    stk::math::pow(1.0 + Cw3_6, 1.0 / 6.0) * Cw3_6 /
+    stk::math::pow(g6 + Cw3_6, 7.0 / 6.0);
+  const DblType dfwdNuTilda = dfwdg * dgdNuTilda;
 
   // dnutdx dot dnutdx (for Cb2 term)
   DblType dnutdx_sq = 0.0;
@@ -157,13 +189,18 @@ SANuTildaNodeKernel::execute(
   // Linearize destruction term into LHS
   rhs(0) += (P_sa - D_sa + S_cb2) * rho * dVol;
 
-  // LHS linearization:
-  //   d(P_sa)/d(nuTilda) = Cb1 * STilda (approximate, ignoring STilda dependence)
-  //   d(D_sa)/d(nuTilda) = 2 * Cw1 * fw * nuTilda / d^2
-  const DblType lhsFac =
-    (2.0 * Cw1_ * fw * nuTilda / (d * d) - Cb1_ * STilda) * rho * dVol;
-  // Only add positive contributions to lhs for stability
-  lhs(0, 0) += stk::math::max(lhsFac, 0.0);
+  // LHS linearization using the Positivity recommended by Spalart and Allmaras (1992)
+  const DblType PsdNuTilda = Cb1_ * STilda;
+  const DblType DsdNuTilda = Cw1_ * fw * nuTilda / (d * d);
+  const DblType lhsFac1 = stk::math::max(DsdNuTilda - PsdNuTilda, 0.0);
+
+  const DblType dPsdNuTilda = Cb1_ * dSTildadNuTilda;
+  const DblType dDsdNuTilda =
+    Cw1_ / (d * d) * (fw + nuTilda * dfwdNuTilda);
+  const DblType lhsFac2 = stk::math::max((dDsdNuTilda - dPsdNuTilda) * nuTilda, 0.0);
+
+  // Only add positive contributions to lhs for stability / positivity
+  lhs(0, 0) += (lhsFac1 + lhsFac2) * rho * dVol;
 }
 
 } // namespace nalu
