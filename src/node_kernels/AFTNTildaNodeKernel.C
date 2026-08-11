@@ -100,13 +100,14 @@ AFTNTildaNodeKernel::execute(
     stk::math::max(mu + muT, 1.0e-16);
   const DblType fCrit = (reV >= reVZero) ? 1.0 : 0.0;
 
-  const DblType length = stk::math::max(
+  const DblType lH12 = stk::math::max(
     (6.54 * h12 - 14.07) / (h12 * h12), 1.0e-16);
-  const DblType m =
+  const DblType DH12 = 2.4 * h12 / h12MinusOne;
+  const DblType mH12 =
     (0.058 * (h12 - 4.0) * (h12 - 4.0) / h12MinusOne - 0.068) /
-    length;
+    lH12;
   const DblType fgrowth =
-    2.4 * h12 / h12MinusOne * (1.0 + m) * 0.5 * length;
+    DH12 * (1.0 + mH12) * 0.5 * lH12;
   const DblType dnDReTheta =
     0.028 * h12MinusOne -
     0.0345 * stk::math::exp(
