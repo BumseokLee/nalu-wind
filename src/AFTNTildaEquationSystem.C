@@ -529,9 +529,18 @@ AFTNTildaEquationSystem::assemble_nodal_gradient()
   nalu_ngp::run_entity_algorithm(
     "AFTNTilda::compute_nDotV", ngpMesh, stk::topology::NODE_RANK, sel,
     KOKKOS_LAMBDA(const MeshIndex& mi) {
+      double gradMag = 0.0;
+      for (int d = 0; d < ndim; ++d)
+        gradMag += dwalldistdx.get(mi, d) * dwalldistdx.get(mi, d);
+      gradMag = stk::math::sqrt(gradMag);
+
+      for (int d = 0; d < ndim; ++d)
+        dwalldistdx.get(mi, d) /= stk::math::max(gradMag, 1.0e-16);
+
       double nDotV_tmp = 0.0;
       for (int d = 0; d < ndim; ++d)
-        nDotV_tmp += dwalldistdx.get(mi, d) * vel.get(mi, d);
+        nDotV_tmp +=
+          dwalldistdx.get(mi, d) * vel.get(mi, d);
       nDotV.get(mi, 0) = nDotV_tmp;
     });
 
