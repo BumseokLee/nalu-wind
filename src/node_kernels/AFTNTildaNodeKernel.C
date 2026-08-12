@@ -81,11 +81,10 @@ AFTNTildaNodeKernel::execute(
   const DblType strainMagnitude = stk::math::sqrt(2.0 * strainSquared);
   const DblType vorticityMagnitude = stk::math::sqrt(2.0 * vorticitySquared);
 
-  const DblType hLocalRaw =
-    wallDistance * wallDistance * dvnn / stk::math::max(nu, 1.0e-16);
   const DblType hLocal =
-    stk::math::min(stk::math::max(hLocalRaw, -0.25), 200.0);
-  const DblType h12 = 0.26 * hLocal + 2.4;
+    wallDistance * wallDistance * dvnn / stk::math::max(nu, 1.0e-16);
+  const DblType h12 = stk::math::min(
+    stk::math::max(0.26 * hLocal + 2.4, 2.2), 20.0);
   const DblType h12MinusOne = stk::math::max(h12 - 1.0, 1.0e-16);
 
   const DblType reThetaZero = stk::math::pow(
