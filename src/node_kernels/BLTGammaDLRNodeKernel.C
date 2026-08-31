@@ -65,6 +65,8 @@ BLTGammaDLRNodeKernel::execute(
 {
   using DblType = NodeKernelTraits::DblType;
 
+  const DblType small = 1.0e-16;
+
   const DblType tke = tke_.get(node, 0);
   const DblType sdr = sdr_.get(node, 0);
   const DblType gamint = gamint_.get(node, 0);
@@ -120,21 +122,27 @@ BLTGammaDLRNodeKernel::execute(
     TuL = fsti_; // const. Tu from yaml
   } else {
     TuL = stk::math::min(
-      100.0 * stk::math::sqrt(2.0 / 3.0 * tke) / sdr / (minD + 1.0e-10),
+      100.0 * stk::math::sqrt(stk::math::max(2.0 / 3.0 * tke, 0.0)) /
+        stk::math::max(sdr, small) / (minD + 1.0e-10),
       100.0); // local Tu
   }
+  TuL = stk::math::max(TuL, small);
 
   // Compute Boundary Layer Edge Values
+  const DblType pressureRatio = stk::math::max(pressure / pinf, small);
   DblType var1 = 1 + km1 / 2 * Minf * Minf;
-  DblType var2 = stk::math::pow(pressure / pinf, km1 / kappa);
+  DblType var2 = stk::math::pow(pressureRatio, km1 / kappa);
 
-  const DblType Me = stk::math::sqrt((var1 / var2 - 1) * 2 / km1);
-  const DblType rhoe = density * stk::math::pow(pressure / pinf, 1 / kappa);
-  const DblType Te = Tinf * stk::math::pow(pressure / pinf, km1 / kappa);
+  const DblType Me = stk::math::sqrt(
+    stk::math::max((var1 / var2 - 1) * 2 / km1, 0.0));
+  const DblType rhoe = density * stk::math::pow(pressureRatio, 1 / kappa);
+  const DblType Te = Tinf * stk::math::pow(pressureRatio, km1 / kappa);
   const DblType Ue = stk::math::sqrt(
-    Uinf * Uinf + 2 * kappa / km1 *
-                    (1 - stk::math::pow(pressure / pinf, km1 / kappa)) * pinf /
-                    density);
+    stk::math::max(
+      Uinf * Uinf + 2 * kappa / km1 *
+                        (1 - stk::math::pow(pressureRatio, km1 / kappa)) *
+                        pinf / density,
+      small));
 
   //// Bumseok: Test both options for Sutherland law
   // Option 1. Anderson
@@ -161,8 +169,8 @@ BLTGammaDLRNodeKernel::execute(
   DblType dUedx = 0.0;
   for (int i = 0; i < nDim_; ++i) {
     dUedx = -1 / (Ue * density) *
-            stk::math::pow(pressure / pinf, -1.0 / kappa) * dpdx_.get(node, i);
-    dUeds += velocity_.get(node, i) / u_mag * dUedx;
+        stk::math::pow(pressureRatio, -1.0 / kappa) * dpdx_.get(node, i);
+      dUeds += velocity_.get(node, i) / stk::math::max(u_mag, small) * dUedx;
   }
 
   // Compute the pressure gradient parameter lambda_t iteratively
@@ -201,9 +209,10 @@ BLTGammaDLRNodeKernel::execute(
     pi_shape = 0.071665 * stk::math::pow(h12, 3) -
                0.73186 * stk::math::pow(h12, 2) + 4.2563 * h12 - 5.1743;
 
-    theta_t = Rev / pi_shape * nue / Ue;
+    theta_t = Rev / stk::math::max(pi_shape, small) * nue / Ue;
 
-    lambda_t = stk::math::pow(Rev / pi_shape, 2) * nue / (Ue * Ue) * dUeds;
+    lambda_t = stk::math::pow(Rev / stk::math::max(pi_shape, small), 2) * nue /
+           (Ue * Ue) * dUeds;
 
     // Limit lambda_t within the range
     lambda_t =
@@ -221,7 +230,8 @@ BLTGammaDLRNodeKernel::execute(
                       stk::math::log((7 * Me + 4.8) * TuL / 100.0) *
                       stk::math::exp((5 * Me + 27) * lambda_t);
 
-  const DblType fonset1 = Rev / pi_shape / Ret;
+  const DblType fonset1 = Rev / stk::math::max(pi_shape, small) /
+                           stk::math::max(Ret, small);
   const DblType fonset2 =
     stk::math::min(stk::math::max(fonset1, stk::math::pow(fonset1, 4)), 2.0);
   const DblType rt = tvisc / visc; // mut/mu
@@ -238,8 +248,10 @@ BLTGammaDLRNodeKernel::execute(
   const DblType DgammaDir =
     caTwo * density * vortMag * fturb * (2.0 * ceTwo * gamint - 1.0);
 
+  const DblType gammaDiag = stk::math::max(DgammaDir - PgammaDir, 0.0);
+
   rhs(0) += (Pgamma - Dgamma) * dVol;
-  lhs(0, 0) += (DgammaDir - PgammaDir) * dVol;
+  lhs(0, 0) += gammaDiag * dVol;
 }
 
 } // namespace nalu
