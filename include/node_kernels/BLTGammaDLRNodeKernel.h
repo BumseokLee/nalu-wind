@@ -58,11 +58,7 @@ private:
   stk::mesh::NgpField<double> dpdx_;
   stk::mesh::NgpField<double> dudx_;
   stk::mesh::NgpField<double> minD_;
-  stk::mesh::NgpField<double> dwalldistdx_;
-  stk::mesh::NgpField<double> dnDotVdx_;
   stk::mesh::NgpField<double> dualNodalVolume_;
-  stk::mesh::NgpField<double> coordinates_;
-  stk::mesh::NgpField<double> velocityNp1_;
   stk::mesh::NgpField<double> gamint_;
 
   unsigned tkeID_{stk::mesh::InvalidOrdinal};
@@ -75,8 +71,6 @@ private:
   unsigned dpdxID_{stk::mesh::InvalidOrdinal};
   unsigned dudxID_{stk::mesh::InvalidOrdinal};
   unsigned minDID_{stk::mesh::InvalidOrdinal};
-  unsigned dwalldistdxID_{stk::mesh::InvalidOrdinal};
-  unsigned dnDotVdxID_{stk::mesh::InvalidOrdinal};
   unsigned dualNodalVolumeID_{stk::mesh::InvalidOrdinal};
   unsigned gamintID_{stk::mesh::InvalidOrdinal};
 

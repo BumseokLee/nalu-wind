@@ -30,8 +30,6 @@ BLTGammaDLRNodeKernel::BLTGammaDLRNodeKernel(const stk::mesh::MetaData& meta)
     pressureID_(get_field_ordinal(meta, "pressure")),
     dudxID_(get_field_ordinal(meta, "dudx")),
     minDID_(get_field_ordinal(meta, "minimum_distance_to_wall")),
-    dwalldistdxID_(get_field_ordinal(meta, "dwalldistdx")),
-    dnDotVdxID_(get_field_ordinal(meta, "dnDotVdx")),
     dualNodalVolumeID_(get_field_ordinal(meta, "dual_nodal_volume")),
     gamintID_(get_field_ordinal(meta, "gamma_transition")),
     nDim_(meta.spatial_dimension())
@@ -96,9 +94,7 @@ BLTGammaDLRNodeKernel::execute(
   const DblType Uinf = 34.1;
   const DblType Minf = 0.1;
 
-  DblType dvnn = 0.0;
   DblType TuL = 0.0;
-  DblType lamda0L = 0.0;
 
   DblType sijMag = 0.0;
   DblType vortMag = 0.0;
