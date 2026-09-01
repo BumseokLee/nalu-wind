@@ -18,6 +18,39 @@
 namespace sierra {
 namespace nalu {
 
+namespace {
+
+KOKKOS_INLINE_FUNCTION
+double
+compute_h12(const double lambda_t)
+{
+  double h12 = 0.0;
+
+  if (lambda_t >= 0.0) {
+    h12 = 4.02923 - stk::math::sqrt(
+      -8838.4 * stk::math::pow(lambda_t, 4) +
+      1105.1 * stk::math::pow(lambda_t, 3) -
+      67.962 * stk::math::pow(lambda_t, 2) + 17.574 * lambda_t + 2.0593);
+  } else {
+    h12 = 2.072 + 0.0731 / (lambda_t + 0.14);
+  }
+
+  return h12;
+}
+
+KOKKOS_INLINE_FUNCTION
+double
+compute_pi_shape(const double h12)
+{
+  const double pi_shape =
+    0.071665 * stk::math::pow(h12, 3) -
+    0.73186 * stk::math::pow(h12, 2) + 4.2563 * h12 - 5.1743;
+
+  return pi_shape;
+}
+
+} // namespace
+
 BLTGammaDLRNodeKernel::BLTGammaDLRNodeKernel(const stk::mesh::MetaData& meta)
   : NGPNodeKernel<BLTGammaDLRNodeKernel>(),
     tkeID_(get_field_ordinal(meta, "turbulent_ke")),
@@ -174,55 +207,69 @@ BLTGammaDLRNodeKernel::execute(
   }
 
   // Compute the pressure gradient parameter lambda_t iteratively
-  // The original AHD paper suggests that lambda_t should be between -0.068253
-  // and 0.1
-  const DblType lambda_t_min = -0.068253;
+  const DblType lambda_t_min = -0.1;
   const DblType lambda_t_max = 0.1;
 
-  // Initial guess for lambda_t
-  DblType lambda_t = 0.0;
-  // DblType lambda_t = (lambda_t_min + lambda_t_max)/2;
+  DblType lambda_t = 0.5 * (lambda_t_min + lambda_t_max);
   DblType theta_t = 0.0;
-  DblType theta_t_old = 0.0;
   DblType h12 = 0.0;
   DblType pi_shape = 0.0;
 
+  /*
+  // Fixed-point iteration retained for reference.
+  DblType theta_t_old = 0.0;
   int iter = 0;
-  int iter_max = 15; // Recomended one 15
+  const int iter_max = 15;
   DblType resid_theta = 1e10;
-
-  // Iteratively solve for theta_t and lambda_t: fixed-point method
   while (iter < iter_max) {
-    iter++;
+    ++iter;
     theta_t_old = theta_t;
 
-    if (lambda_t >= 0.0) {
-      h12 = 4.02923 - stk::math::sqrt(
-                        -8838.4 * stk::math::pow(lambda_t, 4) +
-                        1105.1 * stk::math::pow(lambda_t, 3) -
-                        67.962 * stk::math::pow(lambda_t, 2) +
-                        17.574 * lambda_t + 2.0593);
-    } else {
-      h12 = 2.072 + 0.0731 / (lambda_t + 0.14);
-    }
-
-    pi_shape = 0.071665 * stk::math::pow(h12, 3) -
-               0.73186 * stk::math::pow(h12, 2) + 4.2563 * h12 - 5.1743;
-
+    h12 = compute_h12(lambda_t);
+    pi_shape = compute_pi_shape(h12);
     theta_t = Rev / stk::math::max(pi_shape, small) * nue / Ue;
-
     lambda_t = stk::math::pow(Rev / stk::math::max(pi_shape, small), 2) * nue /
-           (Ue * Ue) * dUeds;
-
-    // Limit lambda_t within the range
-    lambda_t =
-      stk::math::max(stk::math::min(lambda_t, lambda_t_max), lambda_t_min);
-
-    // Compute residual
+               (Ue * Ue) * dUeds;
+    lambda_t = stk::math::max(
+      stk::math::min(lambda_t, lambda_t_max), lambda_t_min);
     resid_theta = stk::math::abs(theta_t - theta_t_old);
 
-    if (iter > 10 && resid_theta <= 1e-10) {
-      break; // Convergence achieved
+    if (iter > 10 && resid_theta <= 1e-10)
+      break;
+  }
+  */
+
+  DblType lambda_lower = lambda_t_min;
+  DblType lambda_upper = lambda_t_max;
+  DblType h12_lower = compute_h12(lambda_lower);
+  DblType pi_lower = compute_pi_shape(h12_lower);
+  DblType residual_lower = lambda_lower -
+    stk::math::pow(Rev / stk::math::max(pi_lower, small), 2) * nue /
+      (Ue * Ue) * dUeds;
+
+  const int iter_max = 15;
+  const DblType theta_tolerance = 1.0e-12;
+  DblType theta_t_old = 0.0;
+  for (int iter = 0; iter < iter_max; ++iter) {
+    lambda_t = 0.5 * (lambda_lower + lambda_upper);
+
+    h12 = compute_h12(lambda_t);
+    pi_shape = compute_pi_shape(h12);
+    theta_t = Rev / stk::math::max(pi_shape, small) * nue / Ue;
+
+    if (iter > 0 && stk::math::abs(theta_t - theta_t_old) <= theta_tolerance)
+      break;
+    theta_t_old = theta_t;
+
+    const DblType residual = lambda_t -
+      stk::math::pow(Rev / stk::math::max(pi_shape, small), 2) * nue /
+        (Ue * Ue) * dUeds;
+
+    if (residual_lower * residual <= 0.0) {
+      lambda_upper = lambda_t;
+    } else {
+      lambda_lower = lambda_t;
+      residual_lower = residual;
     }
   }
 
